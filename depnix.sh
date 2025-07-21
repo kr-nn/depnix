@@ -331,7 +331,7 @@ main() {
   done
 
   if [[ "$#" -lt 2 ]]; then
-      show_help && exit 1
+      echo "There is not enough arguments. Use -h to read help" && exit 1
   fi
 
   nix_file="$1"
