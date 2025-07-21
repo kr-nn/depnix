@@ -8,8 +8,8 @@ git_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd) # where we will be 
 show_help() {
 
   cat <<'EOF'
-    Usage: $0 <nix-file> [subcommand] [-d] [-h] [-k] [-c]
-      <nix-file> This is the config $0 will use
+    Usage: depnix <nix-file> [subcommand] [-d] [-h] [-k] [-c]
+      <nix-file> This is the config depnix will use
 
       subcommands:
         Init:      Create template config the name is whatever you set as a <nix_file>
@@ -260,7 +260,7 @@ deploy() {
   age -d -i $secret ${key}/${flake}_sshkeys.tgz.age | tar -xz -C "$temp"
 
   # Run nixos-anywhere
-  $nixos_anywhere_cmd -f .\#$flake --target-host $hostname --extra-files $temp
+  nixos-anywhere ${options} -f .\#$flake --target-host $hostname --extra-files $temp
   echo "Cleaning $temp ..."
   rm -rf $temp
   echo "Finished deploying $flake"
@@ -277,7 +277,7 @@ drydeploy() {
   echo "age -d -i $secret ${key}/${flake}_sshkeys.tgz.age | tar -xz -C \"$temp\""
 
   # Run nixos-anywhere
-  echo $nixos_anywhere_cmd -f .\#$flake --target-host $hostname --extra-files $temp
+  echo nixos-anywhere ${options} -f .\#$flake --target-host $hostname --extra-files $temp
   echo "Cleaning $temp ..."
   echo rm -rf $temp
   echo "Finished deploying $flake"
@@ -372,13 +372,6 @@ main() {
   esac
 
   server_configs=$(nix eval --file $nix_file --json|jq .$jsonroot)
-
-  if ! which nixos-anywhere &>/dev/null; then
-      nixos_anywhere_cmd="nix run nixos-anywhere#nixos-anywhere -- ${options}"
-  else
-      nixos_anywhere_cmd="nixos-anywhere ${options}"
-  fi
-
   echo "$server_configs" | jq -c '.[]' | while read -r jsonroot; do
 
     flake=$(echo "$jsonroot" | jq -r '.flake')

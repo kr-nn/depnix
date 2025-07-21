@@ -4,17 +4,11 @@
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
 
-    disko.url = "github:nix-community/disko/latest";
-    disko.inputs.nixpkgs.follows = "nixpkgs";
-
     agenix.url = "github:ryantm/agenix";
     agenix.inputs.nixpkgs.follows = "nixpkgs";
-
-    nixos-anywhere.url = "github:nix-community/nixos-anywhere";
-    nixos-anywhere.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, agenix, disko, nixpkgs, ... }:
+  outputs = { self, agenix, disko, nixos-anywhere, nixpkgs, ... }:
 
   let
     system = "x86_64-linux";
@@ -24,11 +18,13 @@
     pname = "depnix";
     version = "1.0";
     unpackPhase = "true";
+    buildInputs = [ pkgs.makeWrapper ];
     src = ./depnix.sh;
     installPhase = ''
       mkdir -p $out/bin
       cp $src $out/bin/depnix
       chmod +x $out/bin/depnix
+      wrapProgram $out/bin/depnix --prefix PATH : ${pkgs.lib.makeBinPath [ pkgs.nixos-anywhere pkgs.nixos-rebuild ] }
     '';
     };
   };
