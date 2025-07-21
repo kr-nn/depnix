@@ -1,5 +1,5 @@
 {
-  description = "script to deploy/update nixos machines as well as interact with them";
+  description = "simple script to deploy/update nixos machines as well as interact with them";
 
   inputs = {
     nixpkgs.url = "github:nixos/nixpkgs/nixos-25.05";
