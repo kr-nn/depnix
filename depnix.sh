@@ -13,7 +13,6 @@ show_help() {
 
       subcommands:
         Init:      Create template config the name is whatever you set as a <nix_file>
-        Validate:  Just check if the config file is valid
         Generate:  Create new ssh keys to bootstrap a server
         Rekey:     Decrypt and re-key the secrets/sshkeys
         Deploy:    Run nixos-anywhere and deploy the server, destroying any and all data there.
@@ -67,47 +66,12 @@ dryrun() {
   local key="$5"
   local oldkey="$6"
   case $action in
-    "validate") validate ;;
     "ssh") drysshrun "$hostname" "$sshcmd" "$secret" ;;
     "generate") drygenerate_keys "$flake" "$hostname" "$secret" "$key" ;;
     "rekey") dryrekey_keys "$flake" "$secret" "$key" "$oldkey" ;;
     "deploy") drydeploy "$flake" "$hostname" "$secret" "$key" ;;
     "switch"|"test"|"boot") dryrebuild "$flake" "$hostname" "$action" ;;
   esac
-}
-
-validate() {
-  nix eval --impure --expr "
-    let
-      data = import ${exe_root}/$nix_file;
-
-      validateList = listName: list:
-        if !builtins.isList list then
-          throw \"Error: '\${listName}' is expected to be a list, but got \${builtins.typeOf list}\"
-        else
-          builtins.all (y:
-            if !builtins.isAttrs y then
-              throw \"Error in '\${listName}': Each item should be an attribute set, but got \${builtins.typeOf y}\"
-            else if !builtins.isString (toString y.flake) then
-              throw \"Error in '\${listName}': 'flake' should be a string, but got \${builtins.typeOf y.flake}\"
-            else if !builtins.isString (toString y.hostname) then
-              throw \"Error in '\${listName}': 'hostname' should be a string, but got \${builtins.typeOf y.hostname}\"
-            else if !builtins.isPath y.secret then
-              throw \"Error in '\${listName}': 'secret' should be a path, but got \${builtins.typeOf y.secret}\"
-            else if listName == \"deploy\" && !builtins.isPath y.keydir then
-              throw \"Error in '\${listName}': 'keydir' should be a path, but got \${builtins.typeOf y.keydir}\"
-            else
-              true
-          ) list;
-
-      isValid =
-        if !builtins.isAttrs data then
-          throw \"Error: Top-level data should be an attribute set, but got \${builtins.typeOf data}\"
-        else
-          (validateList \"rebuild\" data.rebuild) &&
-          (validateList \"deploy\" data.deploy);
-    in
-      isValid"
 }
 
 init() {
@@ -301,26 +265,18 @@ rebuild() {
   local hostname="$2"
   local action="$3"
   local user="${hostname%@*}"
-  if ! [ $user == "root" ]; then
-      sudocmd=" --use-remote-sudo"
-  else
-      sudocmd=""
-  fi
+  [[ ! "$user" == "root" ]] && { sudocmd=" --use-remote-sudo"; } || { sudocmd=""; }
   echo "Rebuilding $flake to $hostname..."
-  nixos-rebuild $action --flake .\#$flake ${options} --target-host $hostname $sudocmd
+  nixos-rebuild "$action" --flake .\#"$flake" "${options}" --target-host "$hostname" "$sudocmd"
 }
 dryrebuild() {
   local flake="$1"
   local hostname="$2"
   local action="$3"
   local user="${hostname%@*}"
-  if ! [ $user == "root" ]; then
-      sudocmd=" --use-remote-sudo"
-  else
-      sudocmd=""
-  fi
+  [[ ! "$user" == "root" ]] && { sudocmd=" --use-remote-sudo"; } || { sudocmd=""; }
   echo "Rebuilding $flake to $hostname..."
-  echo nixos-rebuild $action --flake .\#$flake ${options} --target-host $hostname $sudocmd
+  echo nixos-rebuild "$action" --flake .\#"$flake" "${options}"--target-host "$hostname" "$sudocmd"
 }
 
 main() {
@@ -344,9 +300,8 @@ main() {
   options=""
   shift 2
 
-  # sanity
   [[ -f "$exe_root/$nix_file" || $action == "init" ]] || (echo "File: $nix_file doesn't exist" && echo "" && show_help && exit 1)
-  [[ $action == "init" ]] || [[ $(validate) ]] || exit 1
+  [[ $action == "init" ]] || exit 1
 
   while getopts ":hdo:k:c:" opt; do
     case $opt in
@@ -364,24 +319,22 @@ main() {
 
   case $action in
     "init") init ;;
-    "validate") echo "Successful Validation" && exit 0 ;;
     "dryrun") [[ $original_action == "init" ]] && dryinit || [[ "$original_action" =~ ^(generate|rekey|deploy)$ ]] && jsonroot="deploy" || jsonroot="rebuild" ;;
     "generate"|"rekey"|"deploy") jsonroot="deploy" ;;
     "switch"|"test"|"boot"|"ssh") jsonroot="rebuild" ;;
     *) echo "Invalid action: $action" && echo "" && show_help && exit 1 ;;
   esac
 
-  server_configs=$(nix eval --file $nix_file --json|jq .$jsonroot)
+  server_keys=$( nix eval --file "$nix_file" --json | jq keys )
+
   echo "$server_configs" | jq -c '.[]' | while read -r jsonroot; do
 
-    flake=$(echo "$jsonroot" | jq -r '.flake')
     hostname=$(echo "$jsonroot" | jq -r '.hostname')
     secret=$(echo "$jsonroot" | jq -r '.secret')
     key=$(echo "$jsonroot" | jq -r '.keydir')
 
     echo "performing $action on $flake ==================================="
     case $action in
-      "validate") validate;;
       "ssh") sshrun "$hostname" "$sshcmd" "$secret" ;;
       "dryrun") dryrun "$original_action" "$flake" "$hostname" "$secret" "$key" "$oldkey" ;;
       "generate") generate_keys "$flake" "$hostname" "$secret" "$key" ;;
