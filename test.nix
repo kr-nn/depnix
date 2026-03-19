@@ -1,16 +1,29 @@
-{
-  vaultwarden = {
-    deploy = {
-        hostname = "root@192.168.1.1";
-        secret = ../../age.key;
-        keydir = ../hosts/name/secrets;
-    };
+    {
+      flakename = {
+        deploy = {
+          username = "root";
+          host = "10.0.10.120";
+          secret = /home/kyle/.ssh/id_ed25519;
+          keydir = ./hosts/hostname/secrets;
+        };
+        rebuild = {
+          username = "user";
+          host = "10.0.10.120";
+          secret = /home/kyle/.ssh/id_ed25519;
+        };
+      };
 
-    rebuild = [
-      {
-        hostname = "user@192.168.1.1";
-        secret = ../../id_ed25519;
-      }
-    ];
-  };
-}
+      newflake = {
+        deploy = {
+          username = "root";
+          host = "10.0.10.120";
+          secret = /home/kyle/.ssh/id_ed25519;
+          keydir = ./hosts/hostname/secrets;
+        };
+        rebuild = {
+          username = "kyle";
+          host = "10.0.10.120";
+          secret = /home/kyle/.ssh/id_ed25519;
+        };
+      };
+    }

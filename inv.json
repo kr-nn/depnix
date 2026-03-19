@@ -1,0 +1,34 @@
+{
+  "host":       "10.0.80.6",
+  "user":       "krobinson"
+}
+{
+  "host":       "10.0.10.121",
+  "user":       "root",
+  "password":   "Oxytocin1012"
+}
+{
+  "host":       "10.0.10.91",
+  "user":       "kyle",
+  "id":         "~/.ssh/id_ed25519"
+}
+{
+  "host":       "10.0.10.93",
+  "user":       "kyle",
+  "id":         "~/.ssh/id_ed25519"
+}
+{
+  "host":       "10.0.10.137",
+  "user":       "kyle",
+  "id":         "~/.ssh/id_ed25519"
+}
+{
+  "host":       "10.0.10.104",
+  "user":       "kyle",
+  "id":         "~/.ssh/id_ed25519"
+}
+{
+  "host":       "10.0.10.119",
+  "user":       "kyle",
+  "id":         "~/.ssh/id_ed25519"
+}

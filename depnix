@@ -1,61 +1,87 @@
 #!/usr/bin/env bash
 
+###############################################################
+### Initial Variables #########################################
+###############################################################
+
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+CLEAR='\033[0m'
+
+###############################################################
+### Help Dialog ###############################################
+###############################################################
+
 # Normalize
 set -euo pipefail
 exe_root=$(pwd) # Where we are executing from
 git_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd) # where we will be for most things
 
-show_help() {
+# shellcheck
+show_help() {  #!TODO: change project name
+  echo -e "
+$(printf '=%.0s' $(seq 1 $(tput cols)))
+ ${GREEN}
+ ${GREEN}
+ ${GREEN} placeholder
+ ${GREEN}
+ ${GREEN}
+ ${GREEN}  ${CLEAR}
+$(printf '=%.0s' $(seq 1 $(tput cols)))
+  Usage:${RED} $0 ${GREEN}<nix-file> [subcommand] [-d|--debug] [-h|--help] [-k|--key path] [-c|--command \"echo \'hello'\" ] [-o|--options \"\"]
+      <nix-file> This is the inventory $0 will use
 
-  cat <<'EOF'
-    Usage: depnix <nix-file> [subcommand] [-d] [-h] [-k] [-c]
-      <nix-file> This is the config depnix will use
-
-      subcommands:
-        Init:      Create template config the name is whatever you set as a <nix_file>
-        Generate:  Create new ssh keys to bootstrap a server
-        Rekey:     Decrypt and re-key the secrets/sshkeys
-        Deploy:    Run nixos-anywhere and deploy the server, destroying any and all data there.
-        Test:      Run nixos-rebuild test and rebuild the server
-        Boot:      Run nixos-rebuild boot on the server
-        Switch:    Run nixos-rebuild switch and rebuild the server
-        Ssh:       Run arbitrary commands on remote servers
-
-      options:
-        -o            add arbitrary options to nixos-rebuild/nixos-anywhere
-        -h            show this help dialog
-        -c            define a command wrapped in "" for ssh mode
-        -k            when re-keying ssh_host_keys with a new key you need to point to the old key for decryption
-        -d            explain what we are going to do instead of doing it
-
-      nix options:
-        deploy:           List of attrsets that contain host information prior to deployment
-          .flake:           Str of the flake nixosConfiguration that this will work with
-          .hostname:        Str of ssh host: root@hostname
-          .secret:          Path to the private age key for decrypting the keys on deployment
-          .keydir:          Path to where we store the encrypted ssh keys
-        rebuild:          List of attrsets that contain host information after deployment
-          .flake:           Str of the flake nixosConfiguration that this will work with
-          .hostname:        Str of ssh host: user@hostname
-          .secret:          Path to the private ssh key for authenticating to the server
-
-      Example below:
-      {
-        deploy = [ {
-            flake = "webserver";
-            hostname = "root@10.0.10.120";
-            secret = ../../../../.ssh/age.key;
-            keydir = ../hosts/webserver/secrets;
-        } ];
-
-        rebuild = [ {
-            flake = "webserver";
-            hostname = "user@10.0.10.120";
-            secret = ../../../../.ssh/id_ed25519;
-        } ];
-
-      }
-EOF
+  Options:
+ ${RED}      mode                ${GREEN}Specifies the operation you want to take.
+ ${RED}
+ ${RED}                          ${GREEN}init      =  Generate a template of <nix_file> to populate.
+ ${RED}                          ${GREEN}genkey    =  Create new ssh keys to bootstrap a server
+ ${RED}                          ${GREEN}rekey     =  Decrypt and re-key the secrets/sshkeys
+ ${RED}                          ${GREEN}deploy    =  Run nixos-anywhere and deploy the server, destroying any and all data there.
+ ${RED}                          ${GREEN}test      =  Run nixos-rebuild test and rebuild the server
+ ${RED}                          ${GREEN}boot      =  Run nixos-rebuild boot on the server
+ ${RED}                          ${GREEN}switch    =  Run nixos-rebuild switch and rebuild the server
+ ${RED}                          ${GREEN}ssh       =  Run arbitrary commands on remote servers
+ ${RED}
+ ${RED}   -c | --command         ${GREEN}when using ssh mode, specify a command to run on the servers
+ ${RED}                          ${GREEN}this option uses ssher: https://github.com/kr-nn/ssher
+ ${RED}
+ ${RED}   -o | --options         ${GREEN}Add arbitrary options to nixos-rebuild/nixos-anywhere/ssher
+ ${RED}
+ ${RED}   -k | --key             ${GREEN}Path to current key when using rekey mode
+ ${RED}
+ ${RED}   -d | --debug           ${GREEN}Explain what we are going to do instead of doing it
+ ${RED}
+ $(printf '=%.0s' $(seq 1 $(tput cols)))
+ ${RED}
+ ${RED}      nix options:
+ ${RED}        flakename:        Str that matches flake output (must be a Nixos Configuration):
+ ${RED}          deploy:           Attrset of below:
+ ${RED}            .hostname:        Str of ssh host: root@hostname
+ ${RED}            .secret:          Path to the private age key for decrypting the ssh host keys on deployment
+ ${RED}            .keydir:          Path to where we store the encrypted ssh host keys
+ ${RED}          rebuild:          List of attrsets that contain host information after deployment
+ ${RED}            .hostname:        Str of ssh host: user@hostname
+ ${RED}            .secret:          Path to the private ssh key for authenticating to the server
+ ${RED}
+ ${RED}      Example below:
+ ${RED}      {
+ ${RED}        flakename = {
+ ${RED}          deploy = {
+ ${RED}            username = "root";
+ ${RED}            hostname = "10.0.10.120";
+ ${RED}            secret = /home/$USER/.ssh/id_ed25519;
+ ${RED}            keydir = ./hosts/hostname/secrets;
+ ${RED}          };
+ ${RED}          rebuild = {
+ ${RED}            username = "user";
+ ${RED}            hostname = "10.0.10.120";
+ ${RED}            secret = /home/$USER/.ssh/id_ed25519;
+ ${RED}          };
+ ${RED}        };
+ ${RED}      }
+$(printf '=%.0s' $(seq 1 $(tput cols)))" | less
 }
 
 dryrun() {
@@ -67,7 +93,7 @@ dryrun() {
   local oldkey="$6"
   case $action in
     "ssh") drysshrun "$hostname" "$sshcmd" "$secret" ;;
-    "generate") drygenerate_keys "$flake" "$hostname" "$secret" "$key" ;;
+    "genkey") drygenerate_keys "$flake" "$hostname" "$secret" "$key" ;;
     "rekey") dryrekey_keys "$flake" "$secret" "$key" "$oldkey" ;;
     "deploy") drydeploy "$flake" "$hostname" "$secret" "$key" ;;
     "switch"|"test"|"boot") dryrebuild "$flake" "$hostname" "$action" ;;
@@ -77,49 +103,21 @@ dryrun() {
 init() {
   [[ ! -f "$exe_root/$nix_file" ]] || (read -p "This file exists do you want to overwrite it? (y/n): " reply && [[ $reply =~ ^[Yy]$ ]]) || exit 0
   cat <<EOF > $nix_file
-  {
-    deploy = [
-      {
-        flake = "name";
-        hostname = "root@192.168.1.1";
-        secret = ../../age.key;
-        keydir = ../hosts/name/secrets;
-      }
-    ];
-
-    rebuild = [
-      {
-        flake = "name";
-        hostname = "user@192.168.1.1";
-        secret = ../../id_ed25519;
-      }
-    ];
-  }
-EOF
-
-  echo "Created $nix_file"
-  exit 0
-}
-dryinit() {
-  [[ ! -f "$exe_root/$nix_file" ]] || (read -p "This file exists do you want to overwrite it? (y/n): " reply && [[ $reply =~ ^[Yy]$ ]]) || exit 0
-  cat <<EOF
-  {
-    deploy = [
-      {
-        flake = "name";
-        hostname = "root@192.168.1.1";
-        secret = ../../age.key;
-        keydir = ../hosts/name/secrets;
-      }
-    ];
-
-    rebuild = [
-      {
-        flake = "name";
-        hostname = "user@192.168.1.1"; secret = ../../id_ed25519;
-      }
-    ];
-  }
+    {
+      flakename = {
+        deploy = {
+          username = "root";
+          host = "10.0.10.120";
+          secret = /home/$USER/.ssh/id_ed25519;
+          keydir = ./hosts/hostname/secrets;
+        };
+        rebuild = {
+          username = "user";
+          host = "10.0.10.120";
+          secret = /home/$USER/.ssh/id_ed25519;
+        };
+      };
+    }
 EOF
 
   echo "Created $nix_file"
@@ -152,7 +150,8 @@ generate_keys() {
   rm -rf $temp
   echo "Done generating $flake keys"
 }
-drygenerate_keys() {
+
+drygenerate_keys() { #!TODO: merge to standard
   local flake="$1" # Needs to be in each function because we don't want to share a directory with multiple servers
   local hostname="$2"
   local secret="$3"
@@ -195,7 +194,7 @@ rekey_keys() {
   rm -rf $temp
   echo "Done rekeying $flake keys"
 }
-dryrekey_keys() {
+dryrekey_keys() { #!TODO: merge to standard
   local flake="$1"
   local secret="$2"
   local key="$3" # where the ssh_host_keys will go
@@ -229,7 +228,7 @@ deploy() {
   rm -rf $temp
   echo "Finished deploying $flake"
 }
-drydeploy() {
+drydeploy() { #!TODO: merge to standard
   local flake="$1"
   local hostname="$2"
   local secret="$3"
@@ -253,7 +252,7 @@ sshrun() {
   local secret="$3"
   ssh $hostname -i $secret $sshcmd
 }
-drysshrun() {
+drysshrun() { #!TODO: merge to standard
   local hostname="$1"
   local sshcmd="$2"
   local secret="$3"
@@ -269,7 +268,7 @@ rebuild() {
   echo "Rebuilding $flake to $hostname..."
   nixos-rebuild "$action" --flake .\#"$flake" "${options}" --target-host "$hostname" "$sudocmd"
 }
-dryrebuild() {
+dryrebuild() { # TODO: merge to standard
   local flake="$1"
   local hostname="$2"
   local action="$3"
@@ -280,15 +279,17 @@ dryrebuild() {
 }
 
 main() {
-  for arg in "$@"; do
-    if [[ "$arg" == "-h" ]]; then
-      show_help && exit 0
-    fi
-  done
 
-  if [[ "$#" -lt 2 ]]; then
-      echo "There is not enough arguments. Use -h to read help" && exit 1
-  fi
+  ## Help Dialog
+  #for arg in "$@"; do
+  #  if [[ "$arg" == "-h" ]]; then
+  #    show_help && exit 0
+  #  fi
+  #done
+
+  #if [[ "$#" -lt 2 ]]; then # TODO: Remove this
+  #    echo "There is not enough arguments. Use -h to read help" && exit 1
+  #fi
 
   nix_file="$1"
   action="$2"
@@ -300,8 +301,9 @@ main() {
   options=""
   shift 2
 
-  [[ -f "$exe_root/$nix_file" || $action == "init" ]] || (echo "File: $nix_file doesn't exist" && echo "" && show_help && exit 1)
-  [[ $action == "init" ]] || exit 1
+  # We only want to move on when file exists or we're creating one
+  [ -f "$exe_root/$nix_file" || $action == "init" ] || { echo "File: $nix_file doesn't exist" && exit 1}
+  #[[ $action == "init" ]] || exit 1
 
   while getopts ":hdo:k:c:" opt; do
     case $opt in
@@ -319,8 +321,8 @@ main() {
 
   case $action in
     "init") init ;;
-    "dryrun") [[ $original_action == "init" ]] && dryinit || [[ "$original_action" =~ ^(generate|rekey|deploy)$ ]] && jsonroot="deploy" || jsonroot="rebuild" ;;
-    "generate"|"rekey"|"deploy") jsonroot="deploy" ;;
+    "dryrun") [[ $original_action == "init" ]] && dryinit || [[ "$original_action" =~ ^(genkey|rekey|deploy)$ ]] && jsonroot="deploy" || jsonroot="rebuild" ;;
+    "genkey"|"rekey"|"deploy") jsonroot="deploy" ;;
     "switch"|"test"|"boot"|"ssh") jsonroot="rebuild" ;;
     *) echo "Invalid action: $action" && echo "" && show_help && exit 1 ;;
   esac
@@ -337,7 +339,7 @@ main() {
     case $action in
       "ssh") sshrun "$hostname" "$sshcmd" "$secret" ;;
       "dryrun") dryrun "$original_action" "$flake" "$hostname" "$secret" "$key" "$oldkey" ;;
-      "generate") generate_keys "$flake" "$hostname" "$secret" "$key" ;;
+      "genkey") generate_keys "$flake" "$hostname" "$secret" "$key" ;;
       "rekey") rekey_keys "$flake" "$secret" "$key" "$oldkey" ;;
       "deploy") deploy "$flake" "$hostname" "$secret" "$key" ;;
       "switch"|"test"|"boot") rebuild "$flake" "$hostname" "$action" ;;
