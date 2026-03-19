@@ -8,6 +8,7 @@
     import-tree.url = "github:vic/import-tree";
 
     ssher.url = "github:kr-nn/ssher";
+    disko.url = "github:nix-community/disko";
     agenix.url = "github:ryantm/agenix";
     agenix.inputs.nixpkgs.follows = "nixpkgs";
 
@@ -16,6 +17,7 @@
   outputs =
     inputs:
     inputs.flake-parts.lib.mkFlake { inherit inputs; } (
+      inputs.disko.flakeModules.default
       inputs.import-tree ./modules
     );
 }
