@@ -16,8 +16,8 @@
 
   outputs =
     inputs:
-    inputs.flake-parts.lib.mkFlake { inherit inputs; } (
+    inputs.flake-parts.lib.mkFlake { inherit inputs; } (inputs.import-tree [
       inputs.disko.flakeModules.default
       inputs.import-tree ./modules
-    );
+    ]);
 }

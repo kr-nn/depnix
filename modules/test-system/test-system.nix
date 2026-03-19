@@ -1,7 +1,25 @@
 { inputs, ... }:{
 
   flake.nixosConfigurations.test-system = { config, lib, pkgs, modulesPath, ... }: {
+
+    depnix = {
+      deploy = {
+        user = "root";
+        hostname = "10.0.10.140";
+        secret = "~/.ssh/id_ed25519";
+        keydir = ./sshkeys;
+      };
+
+      rebuild = {
+        user = "kyle";
+        hostname = "10.0.10.140";
+        secret = "~/.ssh/id_ed25519";
+        password = config.users.users.kyle.initialPassword;
+      };
+    };
+
     system.stateVersion = "25.05";
+
     nixpkgs.config.allowUnfree = true;
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
 
