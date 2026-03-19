@@ -15,4 +15,48 @@
       '';
       };
   };
+
+  flake.nixosModules.depnix = { lib, ... }:{
+    options.depnix = lib.mkOption {
+      default = {};
+      type = lib.types.attrsOf (lib.types.submodule ({ name, ... }:{
+        options = {
+          deploy = lib.mkOption {
+            type = lib.types.submodule {
+              username = lib.mkOption {
+                type = lib.types.str;
+                default = "root";
+              };
+              host = lib.mkOption {
+                type = lib.types.str;
+              };
+              secret = lib.mkOption {
+                type = lib.types.str;
+                default = "~/.ssh/id_ed25519";
+              };
+              keydir = lib.mkOption {
+                type = lib.types.path;
+                default = ./hostkeys;
+              };
+            };
+          };
+          rebuild = lib.mkOption {
+            type = lib.types.submodule {
+              username = lib.mkOption {
+                type = lib.types.str;
+                default = "root";
+              };
+              host = lib.mkOption {
+                type = lib.types.str;
+              };
+              secret = lib.mkOption {
+                type = lib.types.str;
+                default = "~/.ssh/id_ed25519";
+              };
+            };
+          };
+        };
+      }));
+    };
+  };
 }

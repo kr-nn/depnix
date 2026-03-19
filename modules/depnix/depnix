@@ -302,7 +302,7 @@ main() {
   shift 2
 
   # We only want to move on when file exists or we're creating one
-  [ -f "$exe_root/$nix_file" || $action == "init" ] || { echo "File: $nix_file doesn't exist" && exit 1}
+  [ -f "$exe_root/$nix_file" || $action == "init" ] || { echo "File: $nix_file doesn't exist" && exit 1; }
   #[[ $action == "init" ]] || exit 1
 
   while getopts ":hdo:k:c:" opt; do
