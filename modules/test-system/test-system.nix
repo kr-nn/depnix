@@ -1,7 +1,7 @@
 { inputs, ... }:{
 
   flake.nixosConfigurations.test-system = inputs.nixpkgs.lib.nixosSystem {
-    modules = [ inputs.self.nixosModules.test-system inputs.self.nixosModules.depnix ];
+    modules = [ inputs.agenix.nixosModules.default inputs.self.nixosModules.test-system inputs.self.nixosModules.depnix ];
   };
 
   flake.nixosModules.test-system = { config, lib, pkgs, modulesPath, ... }: {
@@ -16,6 +16,12 @@
     depnix.rebuild = {
       user = "kyle";
       host = "10.0.10.140";
+      secret = "~/.ssh/id_ed25519";
+    };
+
+    depnix.ssh = {
+      user = "kyle";
+      hosst = "10.0.10.140";
       secret = "~/.ssh/id_ed25519";
     };
 
@@ -42,6 +48,7 @@
       group = "kyle";
       description = "kyle";
       initialPassword = "testpassword";
+
       extraGroups = [ "networkmanager" "wheel" ];
     };
 
