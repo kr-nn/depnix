@@ -1,21 +1,22 @@
 { inputs, ... }:{
 
-  flake.nixosConfigurations.test-system = { config, lib, pkgs, modulesPath, ... }: {
+  flake.nixosConfigurations.test-system = inputs.nixpkgs.lib.nixosSystem {
+    modules = [ inputs.self.nixosModules.test-system inputs.self.nixosModules.depnix ];
+  };
 
-    depnix = {
-      deploy = {
-        user = "root";
-        hostname = "10.0.10.140";
-        secret = "~/.ssh/id_ed25519";
-        keydir = ./sshkeys;
-      };
+  flake.nixosModules.test-system = { config, lib, pkgs, modulesPath, ... }: {
 
-      rebuild = {
-        user = "kyle";
-        hostname = "10.0.10.140";
-        secret = "~/.ssh/id_ed25519";
-        password = config.users.users.kyle.initialPassword;
-      };
+    depnix.deploy = {
+      user = "root";
+      host = "10.0.10.140";
+      secret = "~/.ssh/id_ed25519";
+      keydir = ./sshkeys;
+    };
+
+    depnix.rebuild = {
+      user = "kyle";
+      host = "10.0.10.140";
+      secret = "~/.ssh/id_ed25519";
     };
 
     system.stateVersion = "25.05";
@@ -54,7 +55,6 @@
     # Hardware ===================================================================================================
     imports =
       [ (modulesPath + "/profiles/qemu-guest.nix")
-        ./disko.nix
       ];
 
     boot.initrd.availableKernelModules = [ "ata_piix" "uhci_hcd" "virtio_pci" "virtio_scsi" "sd_mod" "sr_mod" ];

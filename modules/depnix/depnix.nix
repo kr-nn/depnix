@@ -16,47 +16,115 @@
       };
   };
 
-  flake.nixosModules.depnix = { lib, ... }:{
-    options.depnix = lib.mkOption {
-      default = {};
-      type = lib.types.attrsOf (lib.types.submodule ({ name, ... }:{
-        options = {
-          deploy = lib.mkOption {
-            type = lib.types.submodule {
-              username = lib.mkOption {
-                type = lib.types.str;
-                default = "root";
-              };
-              host = lib.mkOption {
-                type = lib.types.str;
-              };
-              secret = lib.mkOption {
-                type = lib.types.str;
-                default = "~/.ssh/id_ed25519";
-              };
-              keydir = lib.mkOption {
-                type = lib.types.path;
-                default = ./hostkeys;
-              };
+  flake.nixosModules.depnix = { config, lib, ... }:{
+    options.depnix = {
+      deploy = lib.mkOption {
+        default = {};
+        type = lib.types.submodule {
+          options = {
+
+            user = lib.mkOption {
+              type = lib.types.str;
+              default = "root";
             };
-          };
-          rebuild = lib.mkOption {
-            type = lib.types.submodule {
-              username = lib.mkOption {
-                type = lib.types.str;
-                default = "root";
-              };
-              host = lib.mkOption {
-                type = lib.types.str;
-              };
-              secret = lib.mkOption {
-                type = lib.types.str;
-                default = "~/.ssh/id_ed25519";
-              };
+
+            host = lib.mkOption {
+              type = lib.types.str;
             };
+
+            secret = lib.mkOption {
+              type = lib.types.str;
+              default = "~/.ssh/id_ed25519";
+            };
+
+            keydir = lib.mkOption {
+              type = lib.types.path;
+              default = ./hostkeys;
+            };
+
           };
         };
-      }));
+      };
+
+      rebuild = lib.mkOption {
+        default = {};
+        type = lib.types.submodule {
+          options = {
+
+            user = lib.mkOption {
+              type = lib.types.str;
+            };
+
+            host = lib.mkOption {
+              type = lib.types.str;
+            };
+
+            secret = lib.mkOption {
+              type = lib.types.str;
+              default = "~/.ssh/id_ed25519";
+            };
+
+          };
+        };
+      };
+
+      ssh = lib.mkOption {
+        default = {};
+        type = lib.types.submodule {
+          options = {
+
+            user = lib.mkOption {
+              type = lib.types.str;
+              default = config.depnix.rebuild.user;
+            };
+
+            host = lib.mkOption {
+              type = lib.types.str;
+              default = config.depnix.rebuild.host;
+            };
+
+            id = lib.mkOption {
+              type = lib.types.str;
+              default = "~/.ssh/id_ed25519";
+            };
+
+            password = lib.mkOption {
+              type = lib.types.str;
+              default = "";
+            };
+
+          };
+        };
+      };
+
+      elevated-ssh = lib.mkOption {
+        default = {};
+        type = lib.types.submodule {
+          options = {
+
+            user = lib.mkOption {
+              type = lib.types.str;
+              default = config.depnix.deploy.user;
+            };
+
+            host = lib.mkOption {
+              type = lib.types.str;
+              default = config.depnix.rebuild.host;
+            };
+
+            id = lib.mkOption {
+              type = lib.types.str;
+              default = "~/.ssh/id_ed25519";
+            };
+
+            password = lib.mkOption {
+              type = lib.types.str;
+              default = "";
+            };
+
+          };
+        };
+      };
     };
   };
 }
