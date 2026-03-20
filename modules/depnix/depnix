@@ -79,15 +79,13 @@ split_args() {
   done
 }
 
-ls-help() { echo -e "Usage:${RED} depnix ${GREEN}ls [name] [-h|--help]"
-}
 ls-mode() {
 
   set -- "${flag_args[@]}"
 
   while getopts ":h" opt; do
     case $opt in
-      h) ls-help && exit 0 ;;
+      h) echo -e "Usage:${RED} depnix ${GREEN}ls [name...] [-h|--help]" && exit 0 ;;
       *) : ;;
     esac
   done
