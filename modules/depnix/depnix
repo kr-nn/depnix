@@ -187,6 +187,9 @@ genkey-mode() {
 
   [ -z "$keydir" ] && echo "No keydirectory specified. See help with depnix genkey -h" && exit 1
 
+  [ -d "$keydir" ] && gum confirm --default=no --prompt.foreground="#69CC5C" --selected.background="#69CC5C" --selected.foreground="235" \
+    "Key directory ($keydir) already exists are you sure you want to overwrite?" || exit 0
+
   nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
   if ! "$(echo "$nixosNames" | jq "IN(.[]; \"$flakename\")")"; then
     echo "$1 is not a nixosConfiguration"
