@@ -46,7 +46,7 @@ Usage:${RED} $0 ${GREEN}mode [name] [-h|--help]
  ${RED}      [name]           ${GREEN}  The name of the nixosConfiguration you want to work with
  ${RED}
  ${RED}   -h | --help         ${GREEN}  Display help dialog (You can specify the mode as well)
- ${RED}
+ ${CLEAR}
 $(printf '=%.0s' $(seq 1 $(tput cols)))" | less
 
 }
@@ -56,7 +56,6 @@ $(printf '=%.0s' $(seq 1 $(tput cols)))" | less
 ###############################################################
 
 split_args() {
-  local consuming_flags=( "-k" "-c" )
 
   pos_args=()
   flag_args=()
@@ -79,40 +78,14 @@ split_args() {
   done
 }
 
-ls-mode() {
-
-  set -- "${flag_args[@]}"
-
-  while getopts ":h" opt; do
-    case $opt in
-      h) echo -e "Usage:${RED} depnix ${GREEN}ls [name...] [-h|--help]" && exit 0 ;;
-      *) : ;;
-    esac
-  done
-
-  set -- "${pos_args[@]}" && shift
-
-  nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
-  if [ $# -lt 1 ]; then
-    set -- "$(nix eval .#nixosConfigurations --apply 'builtins.attrNames'|jq -r '.[]')"
-  fi
-  while [ $# -gt 0 ]; do
-    if "$(echo "$nixosNames" | jq "IN(.[]; \"$1\")")"; then
-      Conf=$(nix eval --json ".#nixosConfigurations.$1.config.depnix" |jq)
-      echo "nixosConfiguration.$1.depnix = $Conf"
-    else
-      echo "$1 is not a valid nixosConfiguration"
-    fi
-    shift
-  done
-
-}
+###############################################################
+### main ######################################################
+###############################################################
 
 main() {
   split_args "$@"
 
   set -- "${pos_args[@]}"
-#  set -- "${flag_args[@]}"
 
   mode=$1
 
@@ -154,6 +127,91 @@ main() {
     ;;
 
   esac
+}
+
+###############################################################
+### modes #####################################################
+###############################################################
+ls-mode() {
+
+  set -- "${flag_args[@]}"
+
+  while getopts ":h" opt; do
+    case $opt in
+      h) echo -e "Usage:${RED} depnix ls${GREEN} [nixosConfiguration...] [-h|--help]${CLEAR}" && exit 0 ;;
+      *) : ;;
+    esac
+  done
+
+  set -- "${pos_args[@]}" && shift
+
+  nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
+  if [ $# -lt 1 ]; then
+    set -- "$(nix eval .#nixosConfigurations --apply 'builtins.attrNames'|jq -r '.[]')"
+  fi
+  while [ $# -gt 0 ]; do
+    if "$(echo "$nixosNames" | jq "IN(.[]; \"$1\")")"; then
+      Conf=$(nix eval --json ".#nixosConfigurations.$1.config.depnix" |jq)
+      echo "nixosConfiguration.$1.depnix = $Conf"
+    else
+      echo -e "$1 is not a valid nixosConfiguration"
+    fi
+    shift
+  done
+
+}
+
+genkey-mode() {
+
+  set -- "${flag_args[@]}"
+
+  while getopts ":hs:" opt; do
+    case $opt in
+      h) echo -e "Usage:${RED} depnix genkey${GREEN} nixosConfiguration /path/to/ssh_host_keys [-h|--help]${CLEAR}" && exit 0 ;;
+      *) : ;;
+    esac
+  done
+
+  set -- "${pos_args[@]}" && shift
+
+  if [ $# -lt 2 ]; then
+    echo "Not enough arguments. See help with: depnix genkey -h"
+    exit 1
+  elif [ $# -gt 2 ]; then
+    echo "Too many arguments. See help with: depnix genkey -h"
+    exit 1
+  fi
+
+  flakename="$1"
+  keydir="$2"
+
+  [ -z "$keydir" ] && echo "No keydirectory specified. See help with depnix genkey -h" && exit 1
+
+  nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
+  if ! "$(echo "$nixosNames" | jq "IN(.[]; \"$flakename\")")"; then
+    echo "$1 is not a nixosConfiguration"
+    exit 1
+  fi
+
+  deploy=$(nix eval .#nixosConfigurations."$flakename".config.depnix.deploy --json|jq -r )
+  temp=$(mktemp -d)
+  encryptionKey=$(jq -r '.encryptionKey' <<< "$deploy" )
+  echo "Generating and encrypting SSH keys for $flakename..."
+
+  install -d -m755 "$temp/etc/ssh"
+  ssh-keygen -Af "$temp"
+  echo "Generated keys ..."
+  [ -d "$keydir" ] || mkdir -p "$keydir"
+  #age -e -r $encryptionKey > $keydir/$flakename_sshkeys.tgz.enc
+  tar -cz -C "$temp" etc | age -e -o "$keydir/${flakename}_sshhostkeys.tgz.enc" -r "$encryptionKey"
+
+  echo "Keys encrypted and saved here: $keydir/${flakename}_sshhostkeys.tgz.enc"
+  echo ""
+  echo "You can use this key for decrypting secrets with agenix/sopsnix"
+  echo "Use the host key to encrypt all secrets this host needs:"
+  awk  '{print $1 " " $2}' <<< "$(cat "$temp/etc/ssh/ssh_host_ed25519_key.pub")"
+  echo ""
+  rm -rf "$temp"
 }
 
 main "$@"

@@ -26,20 +26,28 @@
             user = lib.mkOption {
               type = lib.types.str;
               default = "root";
+              example = "john";
+              description = ''
+                The username to ssh as when deploying.
+              '';
             };
 
             host = lib.mkOption {
               type = lib.types.str;
+              example = "10.0.0.5 | myserver.domain.com";
+              description = ''
+                The IP address or dns name to ssh to when deploying.
+              '';
             };
 
-            secret = lib.mkOption {
+            encryptionKey = lib.mkOption {
               type = lib.types.str;
-              default = "~/.ssh/id_ed25519";
-            };
-
-            keydir = lib.mkOption {
-              type = lib.types.path;
-              default = ./hostkeys;
+              example = "ssh-ed25519 XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX";
+              default = "";
+              description = ''
+                The public key used to encrypt the ssh_host_keys.
+                Can be an SSH key or an AGE key
+              '';
             };
 
           };
