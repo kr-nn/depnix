@@ -100,8 +100,10 @@ ls-mode() {
   fi
   while [ $# -gt 0 ]; do
     if "$(echo "$nixosNames" | jq "IN(.[]; \"$1\")")"; then
-      nixosConfs=$(nix eval --json ".#nixosConfigurations.$1.config.depnix" |jq)
-      echo "$nixosConfs"
+      Conf=$(nix eval --json ".#nixosConfigurations.$1.config.depnix" |jq)
+      echo "nixosConfiguration.$1.depnix = $Conf"
+    else
+      echo "$1 is not a valid nixosConfiguration"
     fi
     shift
   done
