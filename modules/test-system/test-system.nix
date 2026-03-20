@@ -21,8 +21,8 @@
 
     depnix.ssh = {
       user = "kyle";
-      hosst = "10.0.10.140";
-      secret = "~/.ssh/id_ed25519";
+      host = "10.0.10.140";
+      id = "~/.ssh/id_ed25519";
     };
 
     system.stateVersion = "25.05";
