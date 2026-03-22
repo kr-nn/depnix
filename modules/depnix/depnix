@@ -212,7 +212,7 @@ genkey-mode() {
   [ "$debug" ] && echo "getopts parsed:" "$@"
 
   set -- "${pos_args[@]}" && shift
-  [ "$debug" ] && echo "Postitional Args set:" "$@"
+  [ "$debug" ] && echo "Positional Args set:" "$@"
 
   if [ $# -lt 2 ]; then
     echo "Not enough arguments. See help with: depnix genkey -h"
@@ -300,7 +300,7 @@ rekey-mode() {
   if ! [ -f "$oldkey" ]; then echo "The old key doesn't seem to exist, check the folder for the file"; exit 1; fi
 
   set -- "${pos_args[@]}" && shift
-  [ "$debug" ] && echo "Postitional Args set:" "$@"
+  [ "$debug" ] && echo "Positional Args set:" "$@"
 
   if [ $# -lt 2 ]; then
     echo "Not enough arguments. See help with: depnix genkey -h"
@@ -355,6 +355,97 @@ rekey-mode() {
   [ "$debug" ] && echo "temp directory cleaned"
 
 }
+
+deploy-mode() {
+
+  [ "$debug" ] && echo "deploy entered"
+  set -- "${flag_args[@]}"
+  [ "$debug" ] && echo "Flag Args set:" "$@"
+
+  while getopts $allargs opt; do
+    case $opt in
+      h)
+        echo -e "Usage:"
+        echo -e "    ${RED}depnix deploy${GREEN} [options] <nixosConfiguration> </path/to/ssh/host/key/store>${CLEAR}"
+        echo -e "Options:"
+        echo -e "    -h | --help"
+        exit 0
+        ;;
+      k)
+        oldkey="$OPTARG"
+        [ "$debug" ] && echo "oldkey set"
+        ;;
+    esac
+  done
+  OPTIND=1
+  [ "$debug" ] && echo "getopts parsed:" "$@"
+
+  [ -z "$oldkey" ] && echo "No old key specified, we need one to decrypt the keys prior to re-keying. See help with depnix rekey -h" && exit 1
+  if ! [ -f "$oldkey" ]; then echo "The old key doesn't seem to exist, check the folder for the file"; exit 1; fi
+
+  set -- "${pos_args[@]}" && shift
+  [ "$debug" ] && echo "Positional Args set:" "$@"
+
+  if [ $# -lt 2 ]; then
+    echo "Not enough arguments. See help with: depnix deploy -h"
+    exit 1
+  elif [ $# -gt 2 ]; then
+    echo "Too many arguments. See help with: depnix deploy -h"
+    exit 1
+  fi
+
+  [ "$debug" ] && echo "Checks passed"
+
+  flakename="$1"
+  keydir="$2"
+  keyfile="$keydir/${flakename}_sshhostkeys.tgz.enc"
+
+  [ "$debug" ] && echo "Values set:" "flakename: $flakename" "keydir: $keydir" "keyfile: $keyfile"
+
+  [ -z "$keydir" ] && echo "No keydirectory specified. See help with depnix deploy -h" && exit 1
+  if ! [ -f "$keyfile" ]; then
+    echo "The folder $keydir doesn't contain the file: ${flakename}_sshhostkeys.tgz.enc"
+    exit 1
+  fi
+
+  nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
+  if ! "$(echo "$nixosNames" | jq "IN(.[]; \"$flakename\")")"; then
+    echo "$flakename is not a nixosConfiguration"
+    exit 1
+  fi
+  [ "$debug" ] && echo "nixos found"
+
+  deploy=$(nix eval .#nixosConfigurations."$flakename".config.depnix.deploy --json|jq -r )
+  host=$(jq '.host' <<< "$deploy")
+  [ "$debug" ] && echo "Deploy: $deploy"
+  [ "$debug" ] && echo "host: $host"
+  temp=$(mktemp -d)
+  [ "$debug" ] && echo "temp: $temp"
+  echo "Decrypting ssh host keys for deployment..."
+  age -d -i "$oldkey" -o - "$keyfile" | tar -C "$temp" -xz
+  [ "$debug" ] && echo "Keys decrypted"
+  [ "$debug" ] && ls -lhA "$temp/etc/ssh"
+  echo "Deploying NixOS"
+  #nixos-anywhere -f ".#$flakename" --target-host "$host" --extra-files "$temp" # TODO: make this work
+  echo "Deployment successful!"
+  rm -rf "$temp"
+  [ "$debug" ] && echo "temp directory cleaned"
+
+#deploy() {
+#
+#  echo "Deploying $flake to $hostname..."
+#  mkdir -p "$temp"
+#  age -d -i $secret ${key}/${flake}_sshkeys.tgz.age | tar -xz -C "$temp"
+#
+#  # Run nixos-anywhere
+#  nixos-anywhere ${options} -f .\#$flake --target-host $hostname --extra-files $temp
+#  echo "Cleaning $temp ..."
+#  rm -rf $temp
+#  echo "Finished deploying $flake"
+#}
+
+}
+
 main "$@"
 
 #  while getopts ":hk:c:" opt; do
