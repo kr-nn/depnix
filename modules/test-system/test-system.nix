@@ -10,6 +10,7 @@
       user = "root";
       host = "10.0.10.140";
       encryptionKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILS702QCxlr2wTXjZDaJ0IiO5NKkYMAgN4Ei+YbS19sF";
+      decryptionKeyFile = "~/.ssh/id_ed25519";
     };
 
     depnix.rebuild = {

@@ -11,7 +11,7 @@
         mkdir -p $out/bin
         cp $src $out/bin/depnix
         chmod +x $out/bin/depnix
-        wrapProgram $out/bin/depnix --prefix PATH : ${pkgs.lib.makeBinPath [ inputs.ssher.packages.x86_64-linux.default pkgs.nixos-anywhere pkgs.nixos-rebuild pkgs.jq pkgs.gum ] }
+        wrapProgram $out/bin/depnix --prefix PATH : ${pkgs.lib.makeBinPath [ inputs.ssher.packages.x86_64-linux.default pkgs.nixos-anywhere pkgs.nixos-rebuild pkgs.jq pkgs.gum pkgs.age ] }
       '';
       };
   };
@@ -46,6 +46,15 @@
               default = "";
               description = ''
                 The public key used to encrypt the ssh_host_keys.
+                Can be an SSH key or an AGE key
+              '';
+            };
+            decryptionKeyFile = lib.mkOption {
+              type = lib.types.str;
+              example = "~/.ssh/my_custom_id_ed25519";
+              default = "~/.ssh/id_ed25519";
+              description = ''
+                The private key used to decrypt the ssh_host_keys.
                 Can be an SSH key or an AGE key
               '';
             };
