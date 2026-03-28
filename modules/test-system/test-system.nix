@@ -8,7 +8,7 @@
       inputs.agenix.nixosModules.default # agenix lib
       inputs.self.nixosModules.test-system # nixos config
       inputs.self.nixosModules.depnix # depnix args
-      ./hardware-config.nix
+      (if (builtins.pathExists ./hardware-config.nix) then ./hardware-config.nix else {})
     ] ) ];
   };
 
