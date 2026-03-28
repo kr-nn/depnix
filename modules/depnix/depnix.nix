@@ -97,38 +97,12 @@
               '';
             };
 
-            sshOptions = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              example = [ "StrictHostKeyChecking=no" "jumphost=x.x.x.x" ];
-              default = [];
-              description = ''
-                Pass arbitrary ssh options to nixosAnywhere
-              '';
-            };
-
-            nixOptions = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              example = [ "--impure" "--extra-experimental-features ..." ];
-              default = [];
-              description = ''
-                Pass nix options to nix build commands
-              '';
-            };
-
-            nixosAnywhereOptions = lib.mkOption {
-              type = lib.types.listOf lib.types.str;
-              example = [ "--debug" "--show-trace" ];
-              default = [];
-              description = ''
-                Pass other nixos-anywhere options
-              '';
-            };
-
             buildOn= lib.mkOption {
               type = lib.types.str;
               example = "remote";
               default = "auto";
               description = ''
+                nixos-anywhere:
                 * --build-on auto|remote|local
                   sets the build on settings to auto, remote or local. Default is auto.
                   auto: tries to figure out, if the build is possible on the local host, if not falls back gracefully to remote build
@@ -142,9 +116,36 @@
               example = true;
               default = false;
               description = ''
-                Whether we should prompt for --env-password
+                Whether we should prompt for --env-password in nixos-anywhere
               '';
             };
+
+            #sshOptions = lib.mkOption {
+            #  type = lib.types.listOf lib.types.str;
+            #  example = [ "StrictHostKeyChecking=no" "jumphost=x.x.x.x" ];
+            #  default = [];
+            #  description = ''
+            #    Pass arbitrary ssh options to nixosAnywhere
+            #  '';
+            #};
+
+            #nixOptions = lib.mkOption {
+            #  type = lib.types.listOf lib.types.str;
+            #  example = [ "--impure" "--extra-experimental-features ..." ];
+            #  default = [];
+            #  description = ''
+            #    Pass nix options to nix build commands
+            #  '';
+            #};
+
+            #nixosAnywhereOptions = lib.mkOption {
+            #  type = lib.types.listOf lib.types.str;
+            #  example = [ "--debug" "--show-trace" ];
+            #  default = [];
+            #  description = ''
+            #    Pass other nixos-anywhere options
+            #  '';
+            #};
 
           };
         };
