@@ -18,6 +18,7 @@
     inputs:
     inputs.flake-parts.lib.mkFlake { inherit inputs; } (inputs.import-tree [
       inputs.disko.flakeModules.default
-      inputs.import-tree ./modules
+      #(inputs.import-tree.filterNot (inputs.nixpkgs.lib.hasInfix "hardware-config") ./modules)
+      (inputs.import-tree.matchNot ''.*/hardware-config\.nix'' ./modules) # Import everything except secrets.nix
     ]);
 }

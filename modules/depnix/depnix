@@ -18,7 +18,12 @@ set -eo pipefail
 exe_root=$(pwd) # Where we are executing from
 git_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd) # where we will be for most things
 
-allargs=":hdk:c:"
+# shellcheck disable=SC2064
+trap "cd $exe_root" EXIT
+
+cd "$git_root"
+
+allargs=":hdk:c:a:"
 
 show_help() {
   echo -e "
@@ -148,7 +153,8 @@ main() {
 ### modes #####################################################
 ###############################################################
 ls-mode() {
-
+#### 
+  # Parse args =============================================================================
   [ "$debug" ] && echo "lsmode entered"
   set -- "${flag_args[@]}"
 
@@ -171,12 +177,15 @@ ls-mode() {
   set -- "${pos_args[@]}" && shift
   [ "$debug" ] && echo "Positional args set:" "$@"
 
+  # gather info =============================================================================
   nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
   [ "$debug" ] && echo "nixosNames parsed:" "$nixosNames"
   if [ $# -lt 1 ]; then
     [ "$debug" ] && echo "No nixos systems chosen, checking all"
     set -- "$(nix eval .#nixosConfigurations --apply 'builtins.attrNames'|jq -r '.[]')"
   fi
+
+  # list configs =============================================================================
   while [ $# -gt 0 ]; do
     [ "$debug" ] && echo "$# nixos systems left:" "$@"
     if "$(echo "$nixosNames" | jq "IN(.[]; \"$1\")")"; then
@@ -192,7 +201,8 @@ ls-mode() {
 }
 
 genkey-mode() {
-
+#### 
+  # Parse args =============================================================================
   [ "$debug" ] && echo "genkey entered"
   set -- "${flag_args[@]}"
   [ "$debug" ] && echo "Flag Args set:" "$@"
@@ -201,7 +211,7 @@ genkey-mode() {
     case $opt in
       h)
         echo -e "Usage:"
-        echo -e "    ${RED}depnix genkey${GREEN} [options] <nixosConfiguration> </path/to/ssh/host/key/store>${CLEAR}"
+        echo -e "    ${RED}depnix genkey${GREEN} [options] <nixosConfiguration>${CLEAR}"
         echo -e "Options:"
         echo -e "    -h | --help    Show help dialog"
         exit 0 ;;
@@ -214,65 +224,74 @@ genkey-mode() {
   set -- "${pos_args[@]}" && shift
   [ "$debug" ] && echo "Positional Args set:" "$@"
 
-  if [ $# -lt 2 ]; then
-    echo "Not enough arguments. See help with: depnix genkey -h"
-    exit 1
-  elif [ $# -gt 2 ]; then
-    echo "Too many arguments. See help with: depnix genkey -h"
+  if ! [ $# -eq 1 ]; then
+    echo "Invalid number of arguments"
+    echo "See help with: depnix genkey -h"
     exit 1
   fi
 
   [ "$debug" ] && echo "Checks passed"
 
+  # gather values =============================================================================
   flakename="$1"
-  keydir="$2"
-  keyfile="$keydir/${flakename}_sshhostkeys.tgz.enc"
-
-  [ "$debug" ] && echo "Values set:" "flakename: $flakename" "keydir: $keydir" "keyfile: $keyfile"
-
-  [ -z "$keydir" ] && echo "No keydirectory specified. See help with depnix genkey -h" && exit 1
-
-  if [ -f "$keyfile" ]; then
-    gum confirm --default=no --prompt.foreground="#69CC5C" --selected.background="#69CC5C" --selected.foreground="235" \
-    "Keys ($keyfile) already exists are you sure you want to overwrite?" || exit 0
-  fi
+  [ "$debug" ] && echo "flake: $flakename"
 
   nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
   if ! "$(echo "$nixosNames" | jq "IN(.[]; \"$flakename\")")"; then
     echo "$flakename is not a nixosConfiguration"
     exit 1
   fi
-  [ "$debug" ] && echo "nixos found"
+  [ "$debug" ] && echo "Nixos Found: $flakename"
 
   deploy=$(nix eval .#nixosConfigurations."$flakename".config.depnix.deploy --json|jq -r )
   [ "$debug" ] && echo "Deploy: $deploy"
+
+  keydir=$(jq -r '.sshHostKeyDir' <<< "$deploy")
+  [ "$debug" ] && echo "keydir: $keydir"
+  [ -z "$keydir" ] && echo "No keydirectory specified. See help with depnix genkey -h" && exit 1
+
+  keyfile="$keydir/${flakename}_sshhostkeys.tgz.enc"
+  [ "$debug" ] && echo "keyfile: $keyfile"
+  if [ -f "$keyfile" ]; then
+    gum confirm --default=no --prompt.foreground="#69CC5C" --selected.background="#69CC5C" --selected.foreground="235" \
+    "Keys ($keyfile) already exists are you sure you want to overwrite?" || exit 0
+  fi
+
   temp=$(mktemp -d)
   [ "$debug" ] && echo "temp: $temp"
+
   encryptionKey=$(jq -r '.encryptionKey' <<< "$deploy" )
   [ "$debug" ] && echo "encryptionKey: $encryptionKey"
+
   echo "Generating and encrypting SSH keys for $flakename..."
 
-  install -d -m755 "$temp/etc/ssh"
+  pubkeyfile="${keydir}/${flakename}_ssh_host_ed25519_key.pub"
+
+  # generate and encrypt keys ====================================================================
+  install -d -m700 "$temp/etc/ssh"
   ssh-keygen -Af "$temp"
   [ "$debug" ] && echo "sshkeys made:"
   [ "$debug" ] && ls -lhA "$temp/etc/ssh"
+
   echo "Generated keys ..."
   [ -d "$keydir" ] || mkdir -p "$keydir"
   tar -cz -C "$temp" etc | age -e -o "$keyfile" -r "$encryptionKey"
-  awk  '{print $1 " " $2}' <<< "$(cat "$temp/etc/ssh/ssh_host_ed25519_key.pub")" > "$keyfile.pub"
+  awk  '{print $1 " " $2}' <<< "$(cat "$temp/etc/ssh/ssh_host_ed25519_key.pub")" > "$pubkeyfile"
 
   echo "Keys encrypted and saved here: $keyfile"
   echo ""
   echo "You can use this key for decrypting secrets with agenix/sopsnix"
   echo "Use the host key to encrypt all secrets this host needs:"
-  awk  '{print $1 " " $2}' <<< "$(cat "$temp/etc/ssh/ssh_host_ed25519_key.pub")"
+  echo "path: $pubkeyfile"
+  echo  "contents: $(cat "$pubkeyfile")"
   echo ""
   rm -rf "$temp"
   [ "$debug" ] && echo "temp directory cleaned"
 }
 
 rekey-mode() {
-
+#### 
+  # Parse args =============================================================================
   [ "$debug" ] && echo "rekey entered"
   set -- "${flag_args[@]}"
   [ "$debug" ] && echo "Flag Args set:" "$@"
@@ -281,7 +300,7 @@ rekey-mode() {
     case $opt in
       h)
         echo -e "Usage:"
-        echo -e "    ${RED}depnix rekey${GREEN} [options] <nixosConfiguration> </path/to/ssh/host/key/store>${CLEAR}"
+        echo -e "    ${RED}depnix rekey${GREEN} [options] <nixosConfiguration>${CLEAR}"
         echo -e "Options:"
         echo -e "    -h | --help"
         echo -e "    -k | --key /path/to/old/private/key"
@@ -302,41 +321,49 @@ rekey-mode() {
   set -- "${pos_args[@]}" && shift
   [ "$debug" ] && echo "Positional Args set:" "$@"
 
-  if [ $# -lt 2 ]; then
-    echo "Not enough arguments. See help with: depnix genkey -h"
-    exit 1
-  elif [ $# -gt 2 ]; then
-    echo "Too many arguments. See help with: depnix genkey -h"
+  if ! [ $# -eq 1 ]; then
+    echo "Invalid number of arguments"
+    echo "See help with: depnix rekey -h"
     exit 1
   fi
 
   [ "$debug" ] && echo "Checks passed"
 
+  # gather values =============================================================================
   flakename="$1"
-  keydir="$2"
-  keyfile="$keydir/${flakename}_sshhostkeys.tgz.enc"
-
-  [ "$debug" ] && echo "Values set:" "flakename: $flakename" "keydir: $keydir" "keyfile: $keyfile"
-
-  [ -z "$keydir" ] && echo "No keydirectory specified. See help with depnix genkey -h" && exit 1
-  if ! [ -f "$keyfile" ]; then
-    echo "The folder $keydir doesn't contain the file: ${flakename}_sshhostkeys.tgz.enc"
-    exit 1
-  fi
+  [ "$debug" ] && echo "flake: $flakename"
 
   nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
   if ! "$(echo "$nixosNames" | jq "IN(.[]; \"$flakename\")")"; then
     echo "$flakename is not a nixosConfiguration"
     exit 1
   fi
-  [ "$debug" ] && echo "nixos found"
+  [ "$debug" ] && echo "Nixos Found: $flakename"
 
   deploy=$(nix eval .#nixosConfigurations."$flakename".config.depnix.deploy --json|jq -r )
   [ "$debug" ] && echo "Deploy: $deploy"
+
+  keydir=$(jq -r '.sshHostKeyDir' <<< "$deploy")
+  [ "$debug" ] && echo "keydir: $keydir"
+  [ -z "$keydir" ] && echo "No keydirectory specified. See help with depnix genkey -h" && exit 1
+
+  keyfile="$keydir/${flakename}_sshhostkeys.tgz.enc"
+  [ "$debug" ] && echo "keyfile: $keyfile"
+  if ! [ -f "$keyfile" ]; then
+    echo "The folder $keydir doesn't contain the file: ${flakename}_sshhostkeys.tgz.enc"
+    exit 1
+  fi
+
   temp=$(mktemp -d)
   [ "$debug" ] && echo "temp: $temp"
+
   encryptionKey=$(jq -r '.encryptionKey' <<< "$deploy" )
   [ "$debug" ] && echo "encryptionKey: $encryptionKey"
+
+  decryptionKeyFile=$(jq -r '.decryptionKeyFile' <<< "$deploy" )
+  [ "$debug" ] && echo "decryptionKeyFile: $decryptionKeyFile"
+
+  # decrypt and re-encrypt keys ====================================================================
   echo "decrypting and re-encrypting SSH keys for $flakename..."
 
   age -d -i "$oldkey" -o - "$keyfile" | tar -C "$temp" -xz
@@ -347,10 +374,6 @@ rekey-mode() {
 
   echo "Keys re-encrypted and saved here: $keydir/${flakename}_sshhostkeys.tgz.enc"
   echo ""
-  echo "You can use this key for decrypting secrets with agenix/sopsnix"
-  echo "Use the host key to encrypt all secrets this host needs:"
-  awk  '{print $1 " " $2}' <<< "$(cat "$temp/etc/ssh/ssh_host_ed25519_key.pub")"
-  echo ""
   rm -rf "$temp"
   [ "$debug" ] && echo "temp directory cleaned"
 
@@ -358,6 +381,7 @@ rekey-mode() {
 
 deploy-mode() {
 
+  # Parse args =============================================================================
   [ "$debug" ] && echo "deploy entered"
   set -- "${flag_args[@]}"
   [ "$debug" ] && echo "Flag Args set:" "$@"
@@ -366,42 +390,43 @@ deploy-mode() {
     case $opt in
       h)
         echo -e "Usage:"
-        echo -e "    ${RED}depnix deploy${GREEN} [options] <nixosConfiguration> </path/to/ssh/host/key/store>${CLEAR}"
+        echo -e "    ${RED}depnix deploy${GREEN} [options] <nixosConfiguration>${CLEAR}"
         echo -e "Options:"
         echo -e "    -h | --help"
+        echo -e "    -a | --nixos-anywhere     '--debug' "
         exit 0
         ;;
-      k)
-        oldkey="$OPTARG"
-        [ "$debug" ] && echo "oldkey set"
-        ;;
+  #    a)
+  #      nixosanywhereOptions=${OPTARG}
+  #      ;;
     esac
   done
   OPTIND=1
   [ "$debug" ] && echo "getopts parsed:" "$@"
 
-  [ -z "$oldkey" ] && echo "No old key specified, we need one to decrypt the keys prior to re-keying. See help with depnix rekey -h" && exit 1
-  if ! [ -f "$oldkey" ]; then echo "The old key doesn't seem to exist, check the folder for the file"; exit 1; fi
-
   set -- "${pos_args[@]}" && shift
   [ "$debug" ] && echo "Positional Args set:" "$@"
 
-  if [ $# -lt 2 ]; then
-    echo "Not enough arguments. See help with: depnix deploy -h"
-    exit 1
-  elif [ $# -gt 2 ]; then
-    echo "Too many arguments. See help with: depnix deploy -h"
+  if ! [ $# -eq 1 ]; then
+    echo "Invalid number of arguments"
+    echo "See help with: depnix deploy -h"
     exit 1
   fi
 
   [ "$debug" ] && echo "Checks passed"
 
+  # gather info =============================================================================
   flakename="$1"
-  keydir="$2"
+  [ "$debug" ] && echo "flake: $flakename"
+
+  deploy=$(nix eval .#nixosConfigurations."$flakename".config.depnix.deploy --json|jq -r )
+  [ "$debug" ] && echo "deploy: $deploy"
+
+  keydir=$(jq -r '.sshHostKeyDir' <<< "$deploy")
+  [ "$debug" ] && echo "keydir: $keydir"
+
   keyfile="$keydir/${flakename}_sshhostkeys.tgz.enc"
-
-  [ "$debug" ] && echo "Values set:" "flakename: $flakename" "keydir: $keydir" "keyfile: $keyfile"
-
+  [ "$debug" ] && echo "keyfile: $keyfile"
   [ -z "$keydir" ] && echo "No keydirectory specified. See help with depnix deploy -h" && exit 1
   if ! [ -f "$keyfile" ]; then
     echo "The folder $keydir doesn't contain the file: ${flakename}_sshhostkeys.tgz.enc"
@@ -415,177 +440,56 @@ deploy-mode() {
   fi
   [ "$debug" ] && echo "nixos found"
 
-  deploy=$(nix eval .#nixosConfigurations."$flakename".config.depnix.deploy --json|jq -r )
-  host=$(jq '.host' <<< "$deploy")
-  [ "$debug" ] && echo "Deploy: $deploy"
+  user=$(jq -r '.user' <<< "$deploy")
+
+  host=$(jq -r '.host' <<< "$deploy")
   [ "$debug" ] && echo "host: $host"
+
+  decryptionKey=$(eval echo "$(jq -r '.decryptionKeyFile' <<< "$deploy")")
+  [ "$debug" ] && echo "decryptionKeyFile: $decryptionKeyFile"
+  [ -z "$decryptionKey" ] &&  { echo "decryption key not specified, we need one to decrypt the keys prior to deployment. See help with depnix deploy -h" && exit 1; }
+  [ -f "$decryptionKey" ] || { echo "The decryption key doesn't seem to exist or you don't have permissions to see it, check the folder for the file" && exit 1; }
+
+  id=$(eval echo "$(jq -r '.id' <<< "$deploy")")
+  [ "$debug" ] && echo "id: $id"
+
+  port=$(eval echo "$(jq -r '.port' <<< "$deploy")")
+  [ "$debug" ] && echo "port: $port"
+
+  hardware=$(jq -r '.hardwareConfigFile' <<< "$deploy")
+  [ "$debug" ] && echo "hardware config: $hardware"
+  [ -z "$hardware" ] && exit 1
+
   temp=$(mktemp -d)
   [ "$debug" ] && echo "temp: $temp"
+
+  passprompt=$(eval echo "$(jq -r '.passwordPrompt' <<< "$deploy")")
+  [ "$debug" ] && echo "passprompt: $passprompt"
+  if [ "$passprompt" == "true" ]; then
+    pass=$(gum input --prompt.foreground="#69CC5C" --cursor.background="235" --cursor.foreground="#69CC5C" \
+     --prompt "Enter your password: ")
+    [ -z "$pass" ] &&  { echo "Cancelling..." && exit 1; }
+    export SSHPASS="$pass"
+  fi
+
+  # TODO: add sshOptions
+  # TODO: add nixOptions
+  # TODO: add nixosAnywhereOptions
+
+  # deploy =============================================================================
   echo "Decrypting ssh host keys for deployment..."
-  age -d -i "$oldkey" -o - "$keyfile" | tar -C "$temp" -xz
-  [ "$debug" ] && echo "Keys decrypted"
+  age -d -i "$decryptionKey" -o - "$keyfile" | tar -C "$temp" -xz
+  [ "$debug" ] && echo "Keys decrypted:"
   [ "$debug" ] && ls -lhA "$temp/etc/ssh"
   echo "Deploying NixOS"
-  #nixos-anywhere -f ".#$flakename" --target-host "$host" --extra-files "$temp" # TODO: make this work
+  echo "================================================================================"
+  [ "$debug" ] && echo nixos-anywhere -f ".#$flakename" -i "$id" -p "$port" --extra-files "$temp" --generate-hardware-config nixos-generate-config "$hardware" --target-host "$user@$host"
+  nixos-anywhere -f ".#$flakename" -i "$id" -p "$port" --extra-files "$temp" --generate-hardware-config nixos-generate-config "$hardware" --target-host "$user@$host"
+  echo "================================================================================"
   echo "Deployment successful!"
   rm -rf "$temp"
   [ "$debug" ] && echo "temp directory cleaned"
 
-#deploy() {
-#
-#  echo "Deploying $flake to $hostname..."
-#  mkdir -p "$temp"
-#  age -d -i $secret ${key}/${flake}_sshkeys.tgz.age | tar -xz -C "$temp"
-#
-#  # Run nixos-anywhere
-#  nixos-anywhere ${options} -f .\#$flake --target-host $hostname --extra-files $temp
-#  echo "Cleaning $temp ..."
-#  rm -rf $temp
-#  echo "Finished deploying $flake"
-#}
-
 }
 
 main "$@"
-
-#  while getopts ":hk:c:" opt; do
-#    case $opt in
-#      k) oldkey="$OPTARG" ;;
-#      c) sshcmd="$OPTARG" ;;
-#      :) show_help && exit 1 ;;
-#      \?) show_help && exit 1 ;;
-#    esac
-#  done
-#
-#  [[ $action == "ssh" && $sshcmd == 0 ]] && (echo "No command given for ssh mode" && exit 1)
-#
-#  case $action in
-#    "init") init ;;
-#    "dryrun") [[ $original_action == "init" ]] && dryinit || [[ "$original_action" =~ ^(genkey|rekey|deploy)$ ]] && jsonroot="deploy" || jsonroot="rebuild" ;;
-#    "genkey"|"rekey"|"deploy") jsonroot="deploy" ;;
-#    "switch"|"test"|"boot"|"ssh") jsonroot="rebuild" ;;
-#    *) echo "Invalid action: $action" && echo "" && show_help && exit 1 ;;
-#  esac
-#
-#  servers=$(nix eval --json '.#nixosConfigurations' --apply 'builtins.attrNames')
-#  server_keys=$( nix eval --file "$nix_file" --json | jq keys )
-#
-#  echo "$server_configs" | jq -c '.[]' | while read -r jsonroot; do
-#
-#    hostname=$(echo "$jsonroot" | jq -r '.hostname')
-#    secret=$(echo "$jsonroot" | jq -r '.secret')
-#    key=$(echo "$jsonroot" | jq -r '.keydir')
-#
-#    echo "performing $action on $flake ==================================="
-#    case $action in
-#      "ssh") sshrun "$hostname" "$sshcmd" "$secret" ;;
-#      "dryrun") dryrun "$original_action" "$flake" "$hostname" "$secret" "$key" "$oldkey" ;;
-#      "genkey") generate_keys "$flake" "$hostname" "$secret" "$key" ;;
-#      "rekey") rekey_keys "$flake" "$secret" "$key" "$oldkey" ;;
-#      "deploy") deploy "$flake" "$hostname" "$secret" "$key" ;;
-#      "switch"|"test"|"boot") rebuild "$flake" "$hostname" "$action" ;;
-#      *) echo "Invalid action: $action" && echo "" && show_help && exit 1 ;;
-#    esac
-#    echo ""
-#    echo "================================================================"
-#
-#  done
-#}
-#
-#main "$@"
- #${RED}                       ${GREEN}    ls        =  List the nixosConfigurations in your flake and show their parameters.
- #${RED}                       ${GREEN}    genkey    =  Create new ssh keys to bootstrap a server
- #${RED}                       ${GREEN}    rekey     =  Decrypt and re-key the secrets/sshkeys
- #${RED}                       ${GREEN}    deploy    =  Run nixos-anywhere and deploy the server, destroying any and all data there.
- #${RED}                       ${GREEN}    test      =  Run nixos-rebuild test
- #${RED}                       ${GREEN}    boot      =  Run nixos-rebuild boot
- #${RED}                       ${GREEN}    switch    =  Run nixos-rebuild switch
- #${RED}                       ${GREEN}    ssh       =  Run arbitrary commands on remote servers
-# ${RED}   -c | --command      ${GREEN}  when using ssh mode, specify a command to run on the servers
-# ${RED}                       ${GREEN}  this option uses ssher: https://github.com/kr-nn/ssher
-# ${RED}
-# ${RED}   -o | --options      ${GREEN}  Add arbitrary options to nixos-rebuild/nixos-anywhere/ssher
-# ${RED}
-# ${RED}   -k | --key          ${GREEN}  Path to current key when using rekey mode
-# ${RED}
-# ${RED}   -d | --debug        ${GREEN}  Explain what we are going to do instead of doing it
-# ${RED}
-
-#generate_keys() {
-#  local flake="$1" # Needs to be in each function because we don't want to share a directory with multiple servers
-#  local hostname="$2"
-#  local secret="$3"
-#  local key="$4" # where the ssh_host_keys will go
-#  local temp=$(mktemp -d)
-#  local host="${hostname#*@}"
-#  public_key=$(age-keygen -y $secret)
-#  echo "Generating and encrypting SSH keys for $host..."
-#
-#  install -d -m755 $temp/etc/ssh
-#  ssh-keygen -Af $temp
-#  echo "Generated keys ..."
-#  [ -d $key ] || mkdir -p $key
-#  tar -cz -C $temp etc | age -e -r $public_key > ${key}/${flake}_sshkeys.tgz.age
-#
-#  echo "Keys encrypted and saved as ${key}/${flake}_sshkeys.tgz.age"
-#  echo ""
-#  echo "You can use these keys for decrypting secrets with agenix/sopsnix"
-#  echo "Use the host key to sign all secrets:"
-#  echo "$(cat $temp/etc/ssh/ssh_host_ed25519_key.pub)"
-#  echo ""
-#  echo "Cleaning $temp ..."
-#  rm -rf $temp
-#  echo "Done generating $flake keys"
-#}
-#
-#rekey_keys() {
-#  local flake="$1"
-#  local secret="$2"
-#  local key="$3" # where the ssh_host_keys will go
-#  local oldkey="$4" # -k defines the old key to re-key with
-#  local temp=$(mktemp -d)
-#  public_key=$(age-keygen -y $secret)
-#  echo "de-crypting SSH keys with old key for $hostname..."
-#  age -d -i $oldkey ${key}/${flake}_sshkeys.tgz.age | tar -xz -C "$temp"
-#  echo "re-encrypting SSH keys with new key for $hostname..."
-#  tar -cz -C $temp etc |age -e -r $public_key > ${key}/${flake}_sshkeys.tgz.age
-#  echo ""
-#  echo "Cleaning $temp ..."
-#  rm -rf $temp
-#  echo "Done rekeying $flake keys"
-#}
-#
-#deploy() {
-#  local flake="$1"
-#  local hostname="$2"
-#  local secret="$3"
-#  local key="$4" # where the ssh_host_keys are located
-#  local temp=$(mktemp -d)
-#
-#  echo "Deploying $flake to $hostname..."
-#  mkdir -p "$temp"
-#  age -d -i $secret ${key}/${flake}_sshkeys.tgz.age | tar -xz -C "$temp"
-#
-#  # Run nixos-anywhere
-#  nixos-anywhere ${options} -f .\#$flake --target-host $hostname --extra-files $temp
-#  echo "Cleaning $temp ..."
-#  rm -rf $temp
-#  echo "Finished deploying $flake"
-#}
-#
-#sshrun() {
-#  local hostname="$1"
-#  local sshcmd="$2"
-#  local secret="$3"
-#  ssh $hostname -i $secret $sshcmd
-#}
-#
-#rebuild() {
-#  local flake="$1"
-#  local hostname="$2"
-#  local action="$3"
-#  local user="${hostname%@*}"
-#  [[ ! "$user" == "root" ]] && { sudocmd=" --use-remote-sudo"; } || { sudocmd=""; }
-#  echo "Rebuilding $flake to $hostname..."
-#  nixos-rebuild "$action" --flake .\#"$flake" "${options}" --target-host "$hostname" "$sudocmd"
-#}

@@ -1,16 +1,26 @@
 { inputs, ... }:{
 
   flake.nixosConfigurations.test-system = inputs.nixpkgs.lib.nixosSystem {
-    modules = [ inputs.agenix.nixosModules.default inputs.self.nixosModules.test-system inputs.self.nixosModules.depnix ];
+    modules = [ (inputs.import-tree [
+      inputs.disko.flakeModules.default
+      inputs.disko.nixosModules.default # disko lib
+      inputs.self.diskoConfigurations.test-system # disko config
+      inputs.agenix.nixosModules.default # agenix lib
+      inputs.self.nixosModules.test-system # nixos config
+      inputs.self.nixosModules.depnix # depnix args
+      ./hardware-config.nix
+    ] ) ];
   };
 
-  flake.nixosModules.test-system = { config, lib, pkgs, modulesPath, ... }: {
+  flake.nixosModules.test-system = { config, lib, pkgs, ... }: {
 
     depnix.deploy = {
       user = "root";
       host = "10.0.10.140";
       encryptionKey = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAILS702QCxlr2wTXjZDaJ0IiO5NKkYMAgN4Ei+YbS19sF";
       decryptionKeyFile = "~/.ssh/id_ed25519";
+      sshHostKeyDir = "./modules/test-system";
+      hardwareConfigFile = "./modules/test-system/hardware-config.nix";
     };
 
     depnix.rebuild = {
@@ -29,6 +39,7 @@
 
     nixpkgs.config.allowUnfree = true;
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
+    system.configurationRevision = if inputs.self ? rev then inputs.self.rev else inputs.self.dirtyRev;
 
     # Networking
     networking.hostName = "test-system";
@@ -59,62 +70,61 @@
     boot.kernelPackages = pkgs.linuxPackages;
     security.rtkit.enable = true;
 
-    # Hardware ===================================================================================================
-    imports =
-      [ (modulesPath + "/profiles/qemu-guest.nix")
-      ];
-
-    boot.initrd.availableKernelModules = [ "ata_piix" "uhci_hcd" "virtio_pci" "virtio_scsi" "sd_mod" "sr_mod" ];
-    boot.initrd.kernelModules = [ ];
-    boot.kernelModules = [ ];
-    boot.extraModulePackages = [ ];
-
-    # Enables DHCP on each ethernet and wireless interface. In case of scripted networking
-    # (the default) this is the recommended approach. When using systemd-networkd it's
-    # still possible to use this option, but it's recommended to use it in conjunction
-    # with explicit per-interface declarations with `networking.interfaces.<interface>.useDHCP`.
-    networking.useDHCP = lib.mkDefault true;
-    # networking.interfaces.ens18.useDHCP = lib.mkDefault true;
-
+    # minimum build requirements
     nixpkgs.hostPlatform = lib.mkDefault "x86_64-linux";
+
+    # Hardware ===================================================================================================
+
+    #boot.initrd.availableKernelModules = [ "ata_piix" "uhci_hcd" "virtio_pci" "virtio_scsi" "sd_mod" "sr_mod" ];
+    #boot.initrd.kernelModules = [ ];
+    #boot.kernelModules = [ ];
+    #boot.extraModulePackages = [ ];
+
+    ## Enables DHCP on each ethernet and wireless interface. In case of scripted networking
+    ## (the default) this is the recommended approach. When using systemd-networkd it's
+    ## still possible to use this option, but it's recommended to use it in conjunction
+    ## with explicit per-interface declarations with `networking.interfaces.<interface>.useDHCP`.
+    #networking.useDHCP = lib.mkDefault true;
+    ## networking.interfaces.ens18.useDHCP = lib.mkDefault true;
 
   };
 
   flake.diskoConfigurations.test-system.disko.devices = {
-    disk.main = {
-      device = "/dev/sda";
-      type = "disk";
-      content = {
-        type = "gpt";
-        partitions = {
-          ESP = {
-            type = "EF00";
-            size = "1G";
-            content = {
-              type = "filesystem";
-              format = "vfat";
-              mountpoint = "/boot";
-              mountOptions = [ "umask=0077" ];
+    disk = {
+      main = {
+        device = "/dev/sda";
+        type = "disk";
+        content = {
+          type = "gpt";
+          partitions = {
+            ESP = {
+              type = "EF00";
+              size = "1G";
+              content = {
+                type = "filesystem";
+                format = "vfat";
+                mountpoint = "/boot";
+                mountOptions = [ "umask=0077" ];
+              };
             };
-          };
-          root = {
-            size = "100%";
-            content = {
-              type = "filesystem";
-              format = "ext4";
-              mountpoint = "/";
+            root = {
+              size = "100%";
+              content = {
+                type = "filesystem";
+                format = "ext4";
+                mountpoint = "/";
+              };
             };
-          };
-          swap = {
-            size = "4G";
-            content = {
-              type = "swap";
-              discardPolicy = "both";
+            swap = {
+              size = "4G";
+              content = {
+                type = "swap";
+                discardPolicy = "both";
+              };
             };
           };
         };
       };
     };
   };
-
 }
