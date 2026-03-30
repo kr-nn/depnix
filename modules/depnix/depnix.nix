@@ -158,15 +158,46 @@
 
             user = lib.mkOption {
               type = lib.types.str;
+              default = "root";
+              example = "john";
+              description = ''
+                The username to ssh as when rebuilding.
+              '';
             };
 
             host = lib.mkOption {
               type = lib.types.str;
+              example = "10.0.0.1";
+              description = ''
+                The IP address or dns name to ssh to when rebuilding.
+              '';
             };
 
-            secret = lib.mkOption {
+            id = lib.mkOption {
               type = lib.types.str;
-              default = "~/.ssh/id_ed25519";
+              example = "~/.ssh/id_ed25519";
+              default = "";
+              description = ''
+                The ssh key used for this server to authenticate.
+              '';
+            };
+
+            port = lib.mkOption {
+              type = lib.types.port;
+              default = 22;
+              example = 222;
+              description = ''
+                The custom port for ssh
+              '';
+            };
+
+            useRemoteSudo = lib.mkOption {
+              type = lib.types.bool;
+              example = true;
+              default = false;
+              description = ''
+                If you need to use the sudo command for switching on the remote
+              '';
             };
 
           };

@@ -127,16 +127,13 @@ main() {
       deploy-mode "$@" && exit 0
     ;;
     "test")
-      shift
-      test-mode "$@" && exit 0
+      rebuild-mode "$@" && exit 0
     ;;
     "boot")
-      shift
-      boot-mode "$@" && exit 0
+      rebuild-mode "$@" && exit 0
     ;;
     "switch")
-      shift
-      switch-mode "$@" && exit 0
+      rebuild-mode "$@" && exit 0
     ;;
     "ssh")
       shift
@@ -147,6 +144,12 @@ main() {
     ;;
 
   esac
+}
+
+lsconfig() {
+  flakename=$1
+  Conf=$(nix eval --json ".#nixosConfigurations.$1.config.depnix" |jq)
+  echo "nixosConfiguration.$1.depnix = $Conf"
 }
 
 ###############################################################
@@ -178,26 +181,25 @@ ls-mode() {
   [ "$debug" ] && echo "Positional args set:" "$@"
 
   # gather info =============================================================================
-  nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
+  nixosNames="$(nix eval --json .#nixosConfigurations --apply 'builtins.attrNames' | jq -r '.[]' | tr '\n' ' ')"
+
+  # list configs =============================================================================
   [ "$debug" ] && echo "nixosNames parsed:" "$nixosNames"
   if [ $# -lt 1 ]; then
     [ "$debug" ] && echo "No nixos systems chosen, checking all"
-    set -- "$(nix eval .#nixosConfigurations --apply 'builtins.attrNames'|jq -r '.[]')"
+    for name in $nixosNames; do
+      lsconfig "$name"
+    done
+  else
+    [ "$debug" ] && echo "Selected nixos systems: $*"
+    for arg in "$@"; do
+      for name in $nixosNames; do
+        if [ "$arg" == "$name" ]; then
+          lsconfig "$name"
+        fi
+      done
+    done
   fi
-
-  # list configs =============================================================================
-  while [ $# -gt 0 ]; do
-    [ "$debug" ] && echo "$# nixos systems left:" "$@"
-    if "$(echo "$nixosNames" | jq "IN(.[]; \"$1\")")"; then
-      Conf=$(nix eval --json ".#nixosConfigurations.$1.config.depnix" |jq)
-      echo "nixosConfiguration.$1.depnix = $Conf"
-    else
-      echo -e "$1 is not a valid nixosConfiguration"
-    fi
-    shift
-    [ "$debug" ] && echo "Shifted args"
-  done
-
 }
 
 genkey-mode() {
@@ -236,11 +238,19 @@ genkey-mode() {
   flakename="$1"
   [ "$debug" ] && echo "flake: $flakename"
 
-  nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
-  if ! "$(echo "$nixosNames" | jq "IN(.[]; \"$flakename\")")"; then
+  nixosNames="$(nix eval --json .#nixosConfigurations --apply 'builtins.attrNames' | jq -r '.[]' | tr '\n' ' ')"
+  for name in $nixosNames; do
+    if [ "$name" == "$flakename" ]; then
+      [ "$debug" ] && echo "flake: $flakename"
+      [ "$debug" ] && echo "name: $name"
+      success=true
+    fi
+  done
+  if ! $success; then
     echo "$flakename is not a nixosConfiguration"
     exit 1
   fi
+
   [ "$debug" ] && echo "Nixos Found: $flakename"
 
   deploy=$(nix eval .#nixosConfigurations."$flakename".config.depnix.deploy --json|jq -r )
@@ -333,8 +343,15 @@ rekey-mode() {
   flakename="$1"
   [ "$debug" ] && echo "flake: $flakename"
 
-  nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
-  if ! "$(echo "$nixosNames" | jq "IN(.[]; \"$flakename\")")"; then
+  nixosNames="$(nix eval --json .#nixosConfigurations --apply 'builtins.attrNames' | jq -r '.[]' | tr '\n' ' ')"
+  for name in $nixosNames; do
+    if [ "$name" == "$flakename" ]; then
+      [ "$debug" ] && echo "flake: $flakename"
+      [ "$debug" ] && echo "name: $name"
+      success=true
+    fi
+  done
+  if ! $success; then
     echo "$flakename is not a nixosConfiguration"
     exit 1
   fi
@@ -433,8 +450,15 @@ deploy-mode() {
     exit 1
   fi
 
-  nixosNames=$(nix eval .#nixosConfigurations --apply 'builtins.attrNames')
-  if ! "$(echo "$nixosNames" | jq "IN(.[]; \"$flakename\")")"; then
+  nixosNames="$(nix eval --json .#nixosConfigurations --apply 'builtins.attrNames' | jq -r '.[]' | tr '\n' ' ')"
+  for name in $nixosNames; do
+    if [ "$name" == "$flakename" ]; then
+      [ "$debug" ] && echo "flake: $flakename"
+      [ "$debug" ] && echo "name: $name"
+      success=true
+    fi
+  done
+  if ! $success; then
     echo "$flakename is not a nixosConfiguration"
     exit 1
   fi
@@ -484,12 +508,103 @@ deploy-mode() {
   echo "Deploying NixOS"
   echo "================================================================================"
   [ "$debug" ] && echo nixos-anywhere -f ".#$flakename" -i "$id" -p "$port" --extra-files "$temp" --generate-hardware-config nixos-generate-config "$hardware" --target-host "$user@$host"
-  nixos-anywhere -f ".#$flakename" -i "$id" -p "$port" --extra-files "$temp" --generate-hardware-config nixos-generate-config "$hardware" --target-host "$user@$host"
+  [ "$debug" ] || nixos-anywhere -f ".#$flakename" -i "$id" -p "$port" --extra-files "$temp" --generate-hardware-config nixos-generate-config "$hardware" --target-host "$user@$host"
   echo "================================================================================"
   echo "Deployment successful!"
   rm -rf "$temp"
   [ "$debug" ] && echo "temp directory cleaned"
 
+}
+
+rebuild-mode() {
+
+  # Parse args =============================================================================
+  mode=$1
+  [ "$debug" ] && echo "rebuild ($1) entered"
+  set -- "${flag_args[@]}"
+  [ "$debug" ] && echo "Flag Args set:" "$@"
+
+  while getopts $allargs opt; do
+    case $opt in
+      h)
+        echo -e "Usage:"
+        echo -e "    ${RED}depnix test|boot|switch ${GREEN} [options] <nixosConfiguration>${CLEAR}"
+        echo -e "Options:"
+        echo -e "    -h | --help"
+        exit 0
+        ;;
+    esac
+  done
+  OPTIND=1
+  [ "$debug" ] && echo "getopts parsed:" "$@"
+
+  set -- "${pos_args[@]}" && shift
+  [ "$debug" ] && echo "Positional Args set:" "$@"
+
+  if ! [ $# -eq 1 ]; then
+    echo "Invalid number of arguments"
+    echo "See help with: depnix -h"
+    exit 1
+  fi
+
+  [ "$mode" != "test" ] && [ "$mode" != "boot" ] && [ "$mode" != "switch" ] && { echo "Invalid mode. See help with depnix -h"; exit 1; }
+
+  [ "$debug" ] && echo "Checks passed"
+
+  # gather info =============================================================================
+  flakename="$1"
+  [ "$debug" ] && echo "flake: $flakename"
+
+  rebuild=$(nix eval .#nixosConfigurations."$flakename".config.depnix.rebuild --json|jq -r )
+  [ "$debug" ] && echo "rebuild: $rebuild"
+
+  nixosNames="$(nix eval --json .#nixosConfigurations --apply 'builtins.attrNames' | jq -r '.[]' | tr '\n' ' ')"
+  for name in $nixosNames; do
+    if [ "$name" == "$flakename" ]; then
+      [ "$debug" ] && echo "flake: $flakename"
+      [ "$debug" ] && echo "name: $name"
+      success=true
+    fi
+  done
+  if ! $success; then
+    echo "$flakename is not a nixosConfiguration"
+    exit 1
+  fi
+  [ "$debug" ] && echo "nixos found"
+
+  user=$(jq -r '.user' <<< "$rebuild")
+
+  host=$(jq -r '.host' <<< "$rebuild")
+  [ "$debug" ] && echo "host: $host"
+
+  id=$(eval echo "$(jq -r '.id' <<< "$rebuild")")
+  [ "$debug" ] && echo "id: $id"
+  [ -n "$id" ] && export NIX_SSHOPTS="-i $id"
+
+  port=$(eval echo "$(jq -r '.port' <<< "$rebuild")")
+  [ "$debug" ] && echo "port: $port"
+
+  sudo=$(eval echo "$(jq -r '.useRemoteSudo' <<< "$rebuild")")
+  if [ "$sudo" == "true" ]; then
+    sudocmd=" --sudo"
+    [ "$debug" ] && echo "sudo is true"
+  else
+    sudocmd=""
+    [ "$debug" ] && echo "sudo is false"
+  fi
+
+  # TODO: add sshOptions
+  # TODO: add nixOptions
+  # TODO: add nixosRebuildOptions
+
+  # rebuild =============================================================================
+  echo "Rebuilding NixOS"
+  echo "================================================================================"
+  [ "$debug" ] && env |grep NIX_SSHOPTS
+  [ "$debug" ] && echo nixos-rebuild "$mode" --flake ".#$flakename" -p "$port" --target-host "$user@$host""$sudocmd"
+  [ "$debug" ] || nixos-rebuild "$mode" --flake ".#$flakename" -p "$port" --target-host "$user@$host""$sudocmd";
+  echo "================================================================================"
+  echo "Rebuild successful!"
 }
 
 main "$@"
