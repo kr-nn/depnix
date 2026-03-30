@@ -212,21 +212,49 @@
             user = lib.mkOption {
               type = lib.types.str;
               default = config.depnix.rebuild.user;
+              description = ''
+                The username you want to connect as
+              '';
             };
 
             host = lib.mkOption {
               type = lib.types.str;
               default = config.depnix.rebuild.host;
+              description = ''
+                The hostname/ip/domain that belongs to this host
+              '';
             };
 
             id = lib.mkOption {
               type = lib.types.str;
               default = "~/.ssh/id_ed25519";
+              description = ''
+                The file path where the id file is
+              '';
             };
 
-            password = lib.mkOption {
+            passwordFile = lib.mkOption {
               type = lib.types.str;
               default = "";
+              description = ''
+                The file that will read the password
+              '';
+            };
+
+            ssherOpts = lib.mkOption {
+              type= lib.types.str;
+              default = "";
+              description = ''
+                the options to be provided in the commandline
+              '';
+            };
+
+            ssherInvOpts = lib.mkOption {
+              type= lib.types.str;
+              default = "";
+              description = ''
+                the options to be provided in the inventory
+              '';
             };
 
           };
@@ -240,22 +268,50 @@
 
             user = lib.mkOption {
               type = lib.types.str;
-              default = config.depnix.deploy.user;
+              default = config.depnix.rebuild.user;
+              description = ''
+                The username you want to connect as
+              '';
             };
 
             host = lib.mkOption {
               type = lib.types.str;
               default = config.depnix.rebuild.host;
+              description = ''
+                The hostname/ip/domain that belongs to this host
+              '';
             };
 
             id = lib.mkOption {
               type = lib.types.str;
               default = "~/.ssh/id_ed25519";
+              description = ''
+                The file path where the id file is
+              '';
             };
 
-            password = lib.mkOption {
+            passwordFile = lib.mkOption {
               type = lib.types.str;
               default = "";
+              description = ''
+                The file that will read the password
+              '';
+            };
+
+            ssherOpts = lib.mkOption {
+              type= lib.types.str;
+              default = "";
+              description = ''
+                the options to be provided in the commandline
+              '';
+            };
+
+            ssherInvOpts = lib.mkOption {
+              type= lib.types.str;
+              default = "";
+              description = ''
+                the options to be provided in the inventory
+              '';
             };
 
           };
