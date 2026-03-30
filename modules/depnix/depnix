@@ -27,16 +27,17 @@ allargs=":hdk:c:a:"
 
 show_help() {
   echo -e "
-  $(printf '=%.0s' $(seq 1 "$(tput cols)"))
+$(printf '=%.0s' $(seq 1 "$(tput cols)"))
    ${GREEN}
-            
-            placeholder
-            
-            
-            
+  ██████╗ ███████╗██████╗ ███╗   ██╗██╗██╗  ██╗
+  ██╔══██╗██╔════╝██╔══██╗████╗  ██║██║╚██╗██╔╝
+  ██║  ██║█████╗  ██████╔╝██╔██╗ ██║██║ ╚███╔╝ 
+  ██║  ██║██╔══╝  ██╔═══╝ ██║╚██╗██║██║ ██╔██╗ 
+  ██████╔╝███████╗██║     ██║ ╚████║██║██╔╝ ██╗
+  ╚═════╝ ╚══════╝╚═╝     ╚═╝  ╚═══╝╚═╝╚═╝  ╚═╝
    ${CLEAR}
-  $(printf '=%.0s' $(seq 1 "$(tput cols)"))
-  Usage:${RED} $0 ${GREEN}mode [options] [name]
+$(printf '=%.0s' $(seq 1 "$(tput cols)"))
+  Usage:${RED} depnix ${GREEN}mode [options] [name]
 
     Options:
    ${RED}      [mode]           ${GREEN}  Specifies the operation you want to take.
@@ -586,7 +587,7 @@ rebuild-mode() {
 
   sudo=$(eval echo "$(jq -r '.useRemoteSudo' <<< "$rebuild")")
   if [ "$sudo" == "true" ]; then
-    sudocmd=" --sudo"
+    sudocmd="--sudo"
     [ "$debug" ] && echo "sudo is true"
   else
     sudocmd=""
@@ -601,8 +602,8 @@ rebuild-mode() {
   echo "Rebuilding NixOS"
   echo "================================================================================"
   [ "$debug" ] && env |grep NIX_SSHOPTS
-  [ "$debug" ] && echo nixos-rebuild "$mode" --flake ".#$flakename" -p "$port" --target-host "$user@$host""$sudocmd"
-  [ "$debug" ] || nixos-rebuild "$mode" --flake ".#$flakename" -p "$port" --target-host "$user@$host""$sudocmd";
+  [ "$debug" ] && echo nixos-rebuild "$mode" --flake ".#$flakename" "$sudocmd" -p "$port" --target-host "$user@$host"
+  [ "$debug" ] || nixos-rebuild "$mode" --flake ".#$flakename" "$sudocmd" -p "$port" --target-host "$user@$host"
   echo "================================================================================"
   echo "Rebuild successful!"
 }

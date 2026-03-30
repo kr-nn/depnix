@@ -43,6 +43,7 @@
 
     nixpkgs.config.allowUnfree = true;
     nix.settings.experimental-features = [ "nix-command" "flakes" ];
+    nix.settings.trusted-users = [ "kyle" ];
     system.configurationRevision = if inputs.self ? rev then inputs.self.rev else inputs.self.dirtyRev;
 
     # Networking
