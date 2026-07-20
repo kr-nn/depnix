@@ -618,7 +618,9 @@ ssh-mode() {
 
   while getopts $allargs opt; do
     case $opt in
-      h)
+      c) command="$OPTARG" ;;
+      p) passcmd="-p" ;;
+      h|*)
         echo -e "Usage:"
         echo -e "    ${RED}depnix ssh${GREEN} [options] [<nixosConfiguration...>]${CLEAR}"
         echo -e "Options:"
@@ -626,9 +628,6 @@ ssh-mode() {
         echo -e "    -c | The command you want to run"
         echo -e "    -p | If you want to be prompted for a password"
         exit 0 ;;
-      c) command="$OPTARG" ;;
-      p) passcmd="-p" ;;
-      *) : ;;
     esac
   done
   OPTIND=1
